@@ -1,0 +1,14 @@
+# 忽略 data/ 下所有内容，但保留空文件夹结构
+data/**/*
+!data/.gitkeep
+
+# 忽略具体子目录（可选，如果不需要单独控制子目录）
+# data/output/*
+# data/text/*
+# data/real/*
+
+# 其他忽略项
+utils/oss_key.json
+**/__pycache__/
+**/*.pyc
+**/.pycache/
