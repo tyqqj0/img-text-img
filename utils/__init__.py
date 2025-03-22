@@ -9,16 +9,12 @@
 """
 
 
-
-
 import json
 import os
 
 # Load OSS credentials from configuration file
 file_path = os.path.abspath(__file__)
-oss_dict = json.load(
-    open(os.path.join(os.path.dirname(file_path), "oss_key.json"), "r")
-)
+oss_dict = json.load(open(os.path.join(os.path.dirname(file_path), "keys.json"), "r"))
 
 # Default OSS parameters with clearer names
 default_access_key_id = oss_dict["oss"]["access_key_id"]

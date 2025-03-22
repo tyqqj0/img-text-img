@@ -8,7 +8,7 @@ data/**/*
 # data/real/*
 
 # 其他忽略项
-utils/oss_key.json
+utils/keys.json
 **/__pycache__/
 **/*.pyc
 **/.pycache/
