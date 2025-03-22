@@ -1,0 +1,15 @@
+{
+    "oss": {
+        "access_key_id": "aliyun_access_key_id",
+        "access_key_secret": "aliyun_access_key_secret",
+        "bucket_name": "aliyun_bucket_name",
+        "endpoint": "aliyun_endpoint"
+    },
+    "ark": {
+        "api_key": "volc_ark_api_key"
+    },
+    "volc": {
+        "ak": "volc_ak",
+        "sk": "volc_sk"
+    }
+}
