@@ -30,7 +30,7 @@ def generate_text_from_image(image_path: str) -> str:
 def generate_text_from_images(base_real_path: str):
     for root, dirs, files in os.walk(base_real_path):
         for file in files:
-            print(f"\n Processing {file}")
+            print(f"Processing {file}")
             if file.lower().endswith((".png", ".jpg", ".jpeg")):
                 real_image_path = os.path.join(root, file)
 
@@ -74,7 +74,7 @@ def generate_images_from_text(base_text_path: str):
 
     for root, dirs, files in os.walk(base_text_path):
         for file in files:
-            print(f"\n Processing {file}")
+            print(f"Processing {file}")
             if file.lower().endswith(".txt"):
                 text_file_path = os.path.join(root, file)
 
@@ -112,8 +112,10 @@ if __name__ == "__main__":
         "Please input the action you want to perform: \n(1): generate_text_from_images\n(2): generate_images_from_text\n"
     )
     if action == "1":
+        print("Generating text from images...")
         generate_text_from_images(config["real_image_path"])
     elif action == "2":
+        print("Generating images from text...")
         generate_images_from_text(config["text_image_path"])
     else:
         print("Invalid action")

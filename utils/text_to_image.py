@@ -33,7 +33,8 @@ class TextToImageGenerator:
         self.visual_service.set_sk(sk)
         self.width = width
         self.height = height
-    
+        self.max_retries = max_retries
+
     def _generate(self, text):
         form = {
             "req_key": "high_aes_general_v21_L",
