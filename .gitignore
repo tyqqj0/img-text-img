@@ -9,6 +9,8 @@ data/**/*
 
 # 其他忽略项
 utils/keys.json
+# 其他忽略项
+keys.json
 **/__pycache__/
 **/*.pyc
 **/.pycache/

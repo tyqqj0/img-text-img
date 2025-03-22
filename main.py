@@ -30,7 +30,7 @@ def generate_text_from_image(image_path: str) -> str:
 def generate_text_from_images(base_real_path: str):
     for root, dirs, files in os.walk(base_real_path):
         for file in files:
-            print(file)
+            print(f"\n Processing {file}")
             if file.lower().endswith((".png", ".jpg", ".jpeg")):
                 real_image_path = os.path.join(root, file)
 
@@ -54,6 +54,8 @@ def generate_text_from_images(base_real_path: str):
                     with open(text_path, "w", encoding="utf-8") as f:
                         f.write(description)
 
+                    print(f"Generated text: {text_path}\n")
+
                 except Exception as e:
                     print(f"Error processing {real_image_path}: {str(e)}")
 
@@ -72,7 +74,7 @@ def generate_images_from_text(base_text_path: str):
 
     for root, dirs, files in os.walk(base_text_path):
         for file in files:
-            print(file)
+            print(f"\n Processing {file}")
             if file.lower().endswith(".txt"):
                 text_file_path = os.path.join(root, file)
 
@@ -96,16 +98,19 @@ def generate_images_from_text(base_text_path: str):
                     image_path = os.path.join(output_dir, image_filename)
 
                     # Download and save the image
-                    download_image(image_url, image_path)
-
-                    print(f"Generated and saved image: {image_path}")
+                    if download_image(image_url, image_path) == 0:
+                        print(f"Generated and saved image: {image_path}\n")
+                    else:
+                        print(f"Failed to download image from {image_url}")
 
                 except Exception as e:
                     print(f"Error processing {text_file_path}: {str(e)}")
 
 
 if __name__ == "__main__":
-    action = input("Please input the action you want to perform: \n(1): generate_text_from_images\n(2): generate_images_from_text\n")
+    action = input(
+        "Please input the action you want to perform: \n(1): generate_text_from_images\n(2): generate_images_from_text\n"
+    )
     if action == "1":
         generate_text_from_images(config["real_image_path"])
     elif action == "2":

@@ -12,11 +12,13 @@
 
 from __future__ import print_function
 
+import time
+
 from volcengine.visual.VisualService import VisualService
 
 
 class TextToImageGenerator:
-    def __init__(self, width=512, height=512, ak=None, sk=None):
+    def __init__(self, width=512, height=512, ak=None, sk=None, max_retries=3):
         self.visual_service = VisualService()
         if ak is None:
             from . import default_volc_ak
@@ -31,8 +33,8 @@ class TextToImageGenerator:
         self.visual_service.set_sk(sk)
         self.width = width
         self.height = height
-
-    def generate(self, text):
+    
+    def _generate(self, text):
         form = {
             "req_key": "high_aes_general_v21_L",
             "prompt": text,
@@ -65,3 +67,13 @@ class TextToImageGenerator:
         else:
             print(resp)
             raise Exception(resp.get("message"))
+
+    def generate(self, text):
+        for _ in range(self.max_retries):
+            try:
+                return self._generate(text)
+            except Exception as e:
+                print(e)
+                p
+                time.sleep(1)
+        raise Exception("Failed to generate image")
