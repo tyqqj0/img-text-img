@@ -13,6 +13,8 @@ import utils
 import os
 
 config = {
+    "override_text_prompt": False,
+    "override_output_image": False,
     "real_image_path": "./data/real",
     "text_image_path": "./data/text",
     "output_path": "./data/output",
@@ -37,18 +39,22 @@ def generate_text_from_images(base_real_path: str):
                 # Generate relative path
                 relative_path = os.path.relpath(root, base_real_path)
 
+                # Create corresponding text directory
+                text_dir = os.path.join(config["text_image_path"], relative_path)
+                os.makedirs(text_dir, exist_ok=True)
+
+                # Create text file path (same name with .txt extension)
+                text_filename = os.path.splitext(file)[0] + ".txt"
+                text_path = os.path.join(text_dir, text_filename)
+
+                # Check if the text file already exists
+                if os.path.exists(text_path) and not config["override_text_prompt"]:
+                    print(f"Skipping existing text file: {text_filename}")
+                    continue
+
                 try:
                     # Generate text description
                     description = generate_text_from_image(real_image_path)
-
-                    # Create corresponding text directory
-                    text_dir = os.path.join(config["text_image_path"], relative_path)
-                    os.makedirs(text_dir, exist_ok=True)
-
-                    # Create text file path (same name with .txt extension)
-                    text_path = os.path.join(
-                        text_dir, os.path.splitext(file)[0] + ".txt"
-                    )
 
                     # Save description to file
                     with open(text_path, "w", encoding="utf-8") as f:
@@ -81,6 +87,19 @@ def generate_images_from_text(base_text_path: str):
                 # Generate relative path
                 relative_path = os.path.relpath(root, base_text_path)
 
+                # Create corresponding output directory
+                output_dir = os.path.join(config["output_path"], relative_path)
+                os.makedirs(output_dir, exist_ok=True)
+
+                # Create image file path (change extension from .txt to .jpg)
+                image_filename = os.path.splitext(file)[0] + ".jpg"
+                image_path = os.path.join(output_dir, image_filename)
+
+                # Check if the image file already exists
+                if os.path.exists(image_path) and not config["override_output_image"]:
+                    print(f"Skipping existing image file: {image_filename}")
+                    continue
+
                 try:
                     # Read text content
                     with open(text_file_path, "r", encoding="utf-8") as f:
@@ -88,14 +107,6 @@ def generate_images_from_text(base_text_path: str):
 
                     # Generate image from text
                     image_url = text_to_image.generate(text_content)
-
-                    # Create corresponding output directory
-                    output_dir = os.path.join(config["output_path"], relative_path)
-                    os.makedirs(output_dir, exist_ok=True)
-
-                    # Create image file path (change extension from .txt to .jpg)
-                    image_filename = os.path.splitext(file)[0] + ".jpg"
-                    image_path = os.path.join(output_dir, image_filename)
 
                     # Download and save the image
                     if download_image(image_url, image_path) == 0:
