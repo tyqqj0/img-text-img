@@ -16,6 +16,8 @@ import time
 
 from volcengine.visual.VisualService import VisualService
 
+import warnings
+
 
 class TextToImageGenerator:
     def __init__(self, width=512, height=512, ak=None, sk=None, max_retries=3):
@@ -66,15 +68,15 @@ class TextToImageGenerator:
             else:
                 raise Exception("No image url returned")
         else:
-            print(resp)
-            raise Exception(resp.get("message"))
+            print("Error, resp:", resp)
+            raise Exception(resp)
 
     def generate(self, text):
         for _ in range(self.max_retries):
             try:
                 return self._generate(text)
             except Exception as e:
-                print(e)
-                p
+                print(f"Failed to generate image, error: {e}")
                 time.sleep(1)
+                print("Retrying...")
         raise Exception("Failed to generate image")
