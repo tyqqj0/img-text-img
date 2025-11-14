@@ -25,7 +25,7 @@ class ImageToTextGenerator:
         if text_prompt is None:
             text_prompt = "图片主要讲了什么?"
         resp = self.client.chat.completions.create(
-            model="doubao-1-5-vision-pro-32k-250115",
+            model="doubao-seed-1-6-flash-250828",
             messages=[
                 {
                     "content": [

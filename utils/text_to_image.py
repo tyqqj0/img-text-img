@@ -19,6 +19,17 @@ from volcengine.visual.VisualService import VisualService
 import warnings
 
 
+
+code_map = {
+    200: "success",
+    400: "error",
+    50411: "Pre Img Risk Not Pass, Please check the input image",
+    50511: "Post Img Risk Not Pass, Please check the input text",
+    50412: "Text Risk Not Pass, Please check the input text",
+    50512: "Post Text Risk Not Pass, Please check the input text",
+    50413: "Post Text Risk Not Pass, Please check the input text",
+}
+
 class TextToImageGenerator:
     def __init__(self, width=512, height=512, ak=None, sk=None, max_retries=3):
         self.visual_service = VisualService()
@@ -67,6 +78,8 @@ class TextToImageGenerator:
                 return image_urls[0]
             else:
                 raise Exception("No image url returned")
+        elif resp.get("code") in code_map:
+            raise Exception(code_map[resp.get("code")])
         else:
             print("Error, resp:", resp)
             raise Exception(resp)
