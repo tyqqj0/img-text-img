@@ -342,6 +342,41 @@ def _process_metadata_task(task):
         return False, real_image_path, str(exc)
 
 
+def _build_metadata_index():
+    meta_root = config.get("meta_path")
+    if not meta_root or not os.path.isdir(meta_root):
+        print(f"Metadata root directory does not exist: {meta_root}")
+        return
+
+    index = {}
+    for root, _, files in os.walk(meta_root):
+        for file in files:
+            if not file.lower().endswith(".json"):
+                continue
+            if file == "all_metadata.json":
+                continue
+
+            meta_path = os.path.join(root, file)
+            try:
+                with open(meta_path, "r", encoding="utf-8") as meta_file:
+                    data = json.load(meta_file)
+            except Exception as exc:
+                print(f"Failed to include metadata file {meta_path} in index: {exc}")
+                continue
+
+            relative_meta_path = os.path.relpath(meta_path, meta_root)
+            relative_meta_path = _normalize_relative_path(relative_meta_path)
+            index[relative_meta_path] = data
+
+    index_path = os.path.join(meta_root, "all_metadata.json")
+    try:
+        with open(index_path, "w", encoding="utf-8") as index_file:
+            json.dump(index, index_file, ensure_ascii=False, indent=2)
+        print(f"Metadata index written to {index_path} ({len(index)} items).")
+    except Exception as exc:
+        print(f"Failed to write metadata index file {index_path}: {exc}")
+
+
 def generate_metadata_for_images(base_real_path: str):
     if not os.path.isdir(base_real_path):
         print(f"Directory does not exist: {base_real_path}")
@@ -349,6 +384,7 @@ def generate_metadata_for_images(base_real_path: str):
     tasks = _collect_metadata_tasks(base_real_path)
     print(f"Images requiring metadata: {len(tasks)}")
     _run_tasks_concurrently(tasks, _process_metadata_task, "Images -> Metadata")
+    _build_metadata_index()
 
 
 def _collect_image_tasks(base_real_path: str):
@@ -399,12 +435,18 @@ def _collect_text_tasks(base_text_path: str):
             text_file_path = os.path.join(root, file)
             relative_path = _normalize_relative_path(os.path.relpath(root, base_text_path))
             output_dir = os.path.join(config["output_path"], relative_path)
-            image_filename = os.path.splitext(file)[0] + ".jpg"
+            base_name = os.path.splitext(file)[0]
+            image_filename = base_name + ".jpg"
             image_path = os.path.join(output_dir, image_filename)
+            prefixed_image_filename = image_filename if image_filename.startswith("F_") else f"F_{image_filename}"
+            prefixed_image_path = os.path.join(output_dir, prefixed_image_filename)
             meta_dir = os.path.join(config["meta_path"], relative_path)
-            meta_filename = os.path.splitext(file)[0] + ".json"
+            meta_filename = base_name + ".json"
             meta_path = os.path.join(meta_dir, meta_filename)
-            if os.path.exists(image_path) and not config["override_output_image"]:
+            if (
+                (os.path.exists(image_path) or os.path.exists(prefixed_image_path))
+                and not config["override_output_image"]
+            ):
                 continue
             tasks.append((text_file_path, image_path, meta_path))
     return tasks
@@ -436,13 +478,48 @@ def generate_images_from_text(base_text_path: str):
     _run_tasks_concurrently(tasks, _process_text_to_image_task, "Text -> Images")
 
 
+def prefix_output_images(base_output_path: str):
+    if not os.path.isdir(base_output_path):
+        print(f"Directory does not exist: {base_output_path}")
+        return
+
+    renamed = 0
+    already_prefixed = 0
+    collisions = 0
+    for root, _, files in os.walk(base_output_path):
+        for file in files:
+            if not file.lower().endswith(SUPPORTED_IMAGE_EXTENSIONS):
+                continue
+            if file.startswith("F_"):
+                already_prefixed += 1
+                continue
+            source_path = os.path.join(root, file)
+            target_filename = f"F_{file}"
+            target_path = os.path.join(root, target_filename)
+            if os.path.exists(target_path):
+                collisions += 1
+                print(f"Target already exists for {source_path}, skipping rename.")
+                continue
+            try:
+                os.rename(source_path, target_path)
+                renamed += 1
+            except OSError as exc:
+                collisions += 1
+                print(f"Failed to rename {source_path}: {exc}")
+
+    print(
+        f"Prefixing completed. Renamed: {renamed}, already prefixed: {already_prefixed}, collisions/errors: {collisions}"
+    )
+
+
 if __name__ == "__main__":
     action = input(
         "Please input the action you want to perform: \n"
         "(1): generate_metadata_for_images\n"
         "(2): generate_text_from_images\n"
         "(3): generate_images_from_text\n"
-        "(4): run_full_pipeline\n"
+        "(4): prefix_output_images\n"
+        "(5): run_full_pipeline\n"
     )
     if action == "1":
         print("Generating metadata from images...")
@@ -454,6 +531,9 @@ if __name__ == "__main__":
         print("Generating images from text...")
         generate_images_from_text(config["text_image_path"])
     elif action == "4":
+        print("Prefixing output images with F_ if needed...")
+        prefix_output_images(config["output_path"])
+    elif action == "5":
         print("Running full pipeline...")
         generate_metadata_for_images(config["real_image_path"])
         generate_text_from_images(config["real_image_path"])
