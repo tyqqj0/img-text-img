@@ -14,3 +14,4 @@ keys.json
 **/__pycache__/
 **/*.pyc
 **/.pycache/
+keys.json
