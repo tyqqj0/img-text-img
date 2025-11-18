@@ -43,6 +43,16 @@ config: Dict[str, Any] = {
     "ark_sequential_mode": "auto",
     "ark_sequential_max_images": 1,
     "text_prompt": "图片主要讲了什么?请生成一个详细的提示词以用来生成图像，请按照艺术风格+主体描述的格式生成描述，例如:艺术风格：采用写实且带有复古色调的摄影风格，画面整体色调偏暖棕色系，具有一定的颗粒感，营造出自然质朴的氛围。\n主体描述：画面主体是一只站立在地面上的鹿，鹿的毛色为棕色，带有一些深色斑纹，头部转向侧面，两只耳朵竖立，耳朵上有橙色标记。鹿拥有一对形态优美且粗壮的鹿角，向上弯曲伸展。它的四肢修长，蹄子呈蓝绿色。背景是一片开阔的土地，地面上散布着一些干枯的树枝和小石块，远处有一些低矮的绿色植被。",
+    "text_prompt_language": "en",  # options: "zh", "en"
+    "text_prompt_en": (
+        "What is the main content of the image? Please generate a detailed English prompt for image generation. "
+        "Use the format: art style + subject description. For example:\n"
+        "Art style: realistic photography with a vintage warm-brown tone and a slight grainy texture, creating a natural and rustic atmosphere.\n"
+        "Subject description: the main subject is a deer standing on the ground. The deer has brown fur with darker spots. "
+        "Its head is turned to the side and both ears are upright with orange markings. It has a pair of thick, elegant antlers curving upwards. "
+        "Its legs are slender and the hooves are bluish-green. The background is an open field with scattered dry branches and small stones on the ground, "
+        "and some low green plants in the distance."
+    ),
     "max_workers": min(8, (os.cpu_count() or 4)),
     "enable_progress_bar": True,
 }
@@ -88,6 +98,18 @@ def _get_image_to_text_generator():
         generator = utils.ImageToTextGenerator()
         _THREAD_LOCAL.image_to_text_generator = generator
     return generator
+
+
+def _get_image_to_text_prompt() -> str:
+    zh_default = config["text_prompt"]
+    en_default = config.get("text_prompt_en")
+    lang = config.get("text_prompt_language", "zh")
+    if lang == "en":
+        return en_default or (
+            "What is the main content of the image? Please generate a detailed English prompt for image generation. "
+            "Use the format: art style + subject description."
+        )
+    return config.get("text_prompt", zh_default)
 
 
 def _get_text_to_image_generator():
@@ -301,6 +323,8 @@ def _run_tasks_concurrently(tasks, worker, desc: str):
     else:
         print(f"All {desc} tasks completed successfully.")
 
+    return errors
+
 
 def generate_text_from_image(image_path: str) -> str:
     prepared_path, cleanup = _prepare_image_for_upload(image_path)
@@ -310,7 +334,8 @@ def generate_text_from_image(image_path: str) -> str:
         if not image_url:
             raise RuntimeError(f"Failed to upload image: {image_path}")
         image_to_text = _get_image_to_text_generator()
-        return image_to_text.generate(image_url, config["text_prompt"])
+        prompt = _get_image_to_text_prompt()
+        return image_to_text.generate(image_url, prompt)
     finally:
         if cleanup is not None:
             cleanup()
@@ -380,11 +405,12 @@ def _build_metadata_index():
 def generate_metadata_for_images(base_real_path: str):
     if not os.path.isdir(base_real_path):
         print(f"Directory does not exist: {base_real_path}")
-        return
+        return []
     tasks = _collect_metadata_tasks(base_real_path)
     print(f"Images requiring metadata: {len(tasks)}")
-    _run_tasks_concurrently(tasks, _process_metadata_task, "Images -> Metadata")
+    errors = _run_tasks_concurrently(tasks, _process_metadata_task, "Images -> Metadata")
     _build_metadata_index()
+    return errors
 
 
 def _collect_image_tasks(base_real_path: str):
@@ -420,10 +446,12 @@ def _process_image_to_text_task(task):
 def generate_text_from_images(base_real_path: str):
     if not os.path.isdir(base_real_path):
         print(f"Directory does not exist: {base_real_path}")
-        return
+        return []
     tasks = _collect_image_tasks(base_real_path)
     print(f"Images requiring text prompts: {len(tasks)}")
-    _run_tasks_concurrently(tasks, _process_image_to_text_task, "Images -> Text")
+    errors = _run_tasks_concurrently(tasks, _process_image_to_text_task, "Images -> Text")
+    # 返回失败的文本文件路径列表，方便外部脚本做自动重试或清理
+    return [identifier for (identifier, _message) in (errors or [])]
 
 
 def _collect_text_tasks(base_text_path: str):
@@ -472,10 +500,65 @@ def _process_text_to_image_task(task):
 def generate_images_from_text(base_text_path: str):
     if not os.path.isdir(base_text_path):
         print(f"Directory does not exist: {base_text_path}")
-        return
+        return []
     tasks = _collect_text_tasks(base_text_path)
     print(f"Text files requiring image generation: {len(tasks)}")
-    _run_tasks_concurrently(tasks, _process_text_to_image_task, "Text -> Images")
+    errors = _run_tasks_concurrently(tasks, _process_text_to_image_task, "Text -> Images")
+    # 返回失败的文本文件路径列表（identifier 在 _process_text_to_image_task 中就是 text_file_path）
+    return [identifier for (identifier, _message) in (errors or [])]
+
+
+def auto_retry_failed_text_to_image(max_rounds: int = 5):
+    """
+    运行 Text -> Images，并对失败样本做一次（或多轮）自动重试：
+    1. 先尝试根据现有文本生成图片；
+    2. 收集失败的文本文件路径并删除对应 .txt；
+    3. 重新从原始图片生成文本；
+    4. 再跑一轮 Text -> Images。
+
+    max_rounds 表示最多重试轮数（不含第一次），默认 2 轮一般够用。
+    """
+    base_text_path = config["text_image_path"]
+
+    # 第一次尝试
+    failed_text_files = generate_images_from_text(base_text_path)
+    if not failed_text_files:
+        print("Text -> Images: no failed tasks, nothing to retry.")
+        return []
+
+    all_failed_rounds = [failed_text_files]
+
+    round_idx = 1
+    while failed_text_files and round_idx <= max_rounds:
+        print(f"Retry round {round_idx}: {len(failed_text_files)} failed text file(s) detected.")
+
+        # 1. 删除失败的文本文件
+        for text_path in failed_text_files:
+            try:
+                os.remove(text_path)
+                print(f"Deleted failed text file: {text_path}")
+            except FileNotFoundError:
+                print(f"Failed text file already missing (skip): {text_path}")
+
+        # 2. 重新从原始图片生成文本（只会对不存在 .txt 的图片生成）
+        print("Regenerating text prompts from images for failed samples...")
+        generate_text_from_images(config["real_image_path"])
+
+        # 3. 再跑一轮 Text -> Images
+        print("Re-running Text -> Images for regenerated text prompts...")
+        failed_text_files = generate_images_from_text(base_text_path)
+        if failed_text_files:
+            all_failed_rounds.append(failed_text_files)
+
+        round_idx += 1
+
+    if failed_text_files:
+        print(f"After {max_rounds} retry round(s), still {len(failed_text_files)} failed text file(s).")
+    else:
+        print("Auto retry completed, no remaining failed Text -> Images tasks.")
+
+    # 返回各轮仍然失败的文本文件路径列表（最后一项是最终仍失败的）
+    return all_failed_rounds
 
 
 def prefix_output_images(base_output_path: str):
@@ -520,6 +603,7 @@ if __name__ == "__main__":
         "(3): generate_images_from_text\n"
         "(4): prefix_output_images\n"
         "(5): run_full_pipeline\n"
+        "(6): auto_retry_failed_text_to_image\n"
     )
     if action == "1":
         print("Generating metadata from images...")
@@ -538,5 +622,8 @@ if __name__ == "__main__":
         generate_metadata_for_images(config["real_image_path"])
         generate_text_from_images(config["real_image_path"])
         generate_images_from_text(config["text_image_path"])
+    elif action == "6":
+        print("Running Text -> Images with auto retry on failed samples...")
+        auto_retry_failed_text_to_image()
     else:
         print("Invalid action")
