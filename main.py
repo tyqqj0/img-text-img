@@ -36,7 +36,7 @@ config: Dict[str, Any] = {
     "meta_path": "./data/meta",
     "width": 1920,
     "height": 1080,
-    "image_size_mode": "fixed",  # options: "fixed", "match_metadata"
+    "image_size_mode": "match_metadata",  # options: "fixed", "match_metadata"
     "ark_fixed_size": "2K",
     "ark_model_name": "doubao-seedream-4-0-250828",
     "ark_base_url": "https://ark.cn-beijing.volces.com/api/v3",
